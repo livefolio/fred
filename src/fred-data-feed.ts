@@ -1,23 +1,25 @@
-import type { Asset, Bar, DataFeed, DateRange, Frequency } from '@livefolio/sdk';
+import type { Asset, Bar, DataFeed, DateRange, Frequency, Quote, QuoteFeed } from '@livefolio/sdk';
 import { assetToFredSeriesId } from './asset';
-import { fetchFredObservations } from './fred-client';
+import { fetchFredObservations, fetchLatestFredObservation, type FredLatestObservation } from './fred-client';
 import { BarCache } from './cache';
 
 /** Function form used to fetch raw bars. Tests inject a mock; production uses {@link fetchFredObservations}. */
-export type FredFetcher = (
-  seriesId: string,
-  range: DateRange,
-  opts: { apiKey: string },
-) => Promise<Bar[]>;
+export type FredFetcher = (seriesId: string, range: DateRange, opts: { apiKey: string }) => Promise<Bar[]>;
+
+/** Function form used to fetch the most recent non-missing observation. Tests inject a mock; production uses {@link fetchLatestFredObservation}. */
+export type FredLatestFetcher = (seriesId: string, opts: { apiKey: string }) => Promise<FredLatestObservation>;
 
 export type FredDataFeedOptions = {
   /** Required. FRED API key. */
   apiKey: string;
-  /** Override the live fetcher. Tests inject a stub to stay offline. */
+  /** Override the live bars fetcher. Tests inject a stub to stay offline. */
   fetcher?: FredFetcher;
+  /** Override the live latest-observation fetcher. Tests inject a stub to stay offline. */
+  latestFetcher?: FredLatestFetcher;
 };
 
 const defaultFetcher: FredFetcher = (seriesId, range, opts) => fetchFredObservations(seriesId, range, opts);
+const defaultLatestFetcher: FredLatestFetcher = (seriesId, opts) => fetchLatestFredObservation(seriesId, opts);
 
 /**
  * Implements `@livefolio/sdk` v0.4's `DataFeed.bars` over FRED's
@@ -32,16 +34,29 @@ const defaultFetcher: FredFetcher = (seriesId, range, opts) => fetchFredObservat
  * `'fundamentals' in feed`.
  *
  * Only `freq: '1d'` is accepted; FRED has no concept of intraday observations.
+ *
+ * Also implements `QuoteFeed` — FRED has no realtime quote endpoint, so
+ * `quote(asset)` returns the most recent non-missing observation for the
+ * series. The returned `Quote.t` is the observation's UTC-midnight date,
+ * not the local clock.
  */
-export class FredDataFeed implements DataFeed {
+export class FredDataFeed implements DataFeed, QuoteFeed {
   private readonly apiKey: string;
   private readonly fetcher: FredFetcher;
+  private readonly latestFetcher: FredLatestFetcher;
   private readonly cache = new BarCache();
   private readonly inflight = new Map<string, Promise<Bar[]>>();
 
   constructor(opts: FredDataFeedOptions) {
     this.apiKey = opts.apiKey;
     this.fetcher = opts.fetcher ?? defaultFetcher;
+    this.latestFetcher = opts.latestFetcher ?? defaultLatestFetcher;
+  }
+
+  async quote(asset: Asset): Promise<Quote> {
+    const seriesId = assetToFredSeriesId(asset);
+    const obs = await this.latestFetcher(seriesId, { apiKey: this.apiKey });
+    return { asset, t: obs.t, price: obs.value };
   }
 
   // Async generator (rather than plain delegation) so the freq/asset-kind

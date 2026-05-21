@@ -1,6 +1,6 @@
 {
   "name": "@livefolio/fred",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "FRED (St. Louis Fed) macro time series adapter for @livefolio/sdk v0.4. Node-only DataFeed implementation; pass-through observations as OHLCV bars.",
   "type": "module",
   "main": "./dist/index.js",
@@ -46,11 +46,11 @@
     "test:watch": "vitest"
   },
   "peerDependencies": {
-    "@livefolio/sdk": "^0.4.0"
+    "@livefolio/sdk": "^0.4.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@livefolio/sdk": "^0.4.0",
+    "@livefolio/sdk": "^0.4.2",
     "@types/node": "^25.6.0",
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",

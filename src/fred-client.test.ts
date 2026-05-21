@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { DateRange } from '@livefolio/sdk';
-import { fetchFredObservations } from './fred-client';
+import { fetchFredObservations, fetchLatestFredObservation } from './fred-client';
 
 const range: DateRange = { from: new Date('2024-04-01T00:00:00Z'), to: new Date('2024-04-06T00:00:00Z') };
 
@@ -82,7 +82,9 @@ describe('fetchFredObservations', () => {
   });
 
   it('throws on FRED 200 with error_message', async () => {
-    fetchSpy.mockResolvedValueOnce(jsonResponse({ error_code: 400, error_message: 'Variable api_key is not registered.' }));
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ error_code: 400, error_message: 'Variable api_key is not registered.' }),
+    );
     await expect(fetchFredObservations('DGS10', range, { apiKey: 'k' })).rejects.toThrow(
       /Variable api_key is not registered/,
     );
@@ -92,5 +94,72 @@ describe('fetchFredObservations', () => {
     const networkErr = new TypeError('fetch failed');
     fetchSpy.mockRejectedValueOnce(networkErr);
     await expect(fetchFredObservations('DGS10', range, { apiKey: 'k' })).rejects.toBe(networkErr);
+  });
+});
+
+describe('fetchLatestFredObservation', () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('requests descending order with limit=10 and no date bounds', async () => {
+    fetchSpy.mockResolvedValueOnce(jsonResponse({ observations: [{ date: '2024-04-03', value: '4.15' }] }));
+    await fetchLatestFredObservation('DGS10', { apiKey: 'TEST_KEY' });
+
+    const url = new URL((fetchSpy.mock.calls[0]![0] as URL | string).toString());
+    expect(url.origin + url.pathname).toBe('https://api.stlouisfed.org/fred/series/observations');
+    expect(url.searchParams.get('series_id')).toBe('DGS10');
+    expect(url.searchParams.get('api_key')).toBe('TEST_KEY');
+    expect(url.searchParams.get('sort_order')).toBe('desc');
+    expect(url.searchParams.get('limit')).toBe('10');
+    expect(url.searchParams.get('observation_start')).toBeNull();
+    expect(url.searchParams.get('observation_end')).toBeNull();
+  });
+
+  it('returns the first non-missing observation at UTC midnight', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        observations: [
+          { date: '2024-04-05', value: '.' },
+          { date: '2024-04-04', value: '.' },
+          { date: '2024-04-03', value: '4.15' },
+          { date: '2024-04-02', value: '4.18' },
+        ],
+      }),
+    );
+    const obs = await fetchLatestFredObservation('DGS10', { apiKey: 'k' });
+    expect(obs).toEqual({ t: new Date('2024-04-03T00:00:00Z'), value: 4.15 });
+  });
+
+  it('throws when every returned observation is missing', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({
+        observations: [
+          { date: '2024-04-05', value: '.' },
+          { date: '2024-04-04', value: '.' },
+        ],
+      }),
+    );
+    await expect(fetchLatestFredObservation('DGS10', { apiKey: 'k' })).rejects.toThrow(/no non-missing observations/);
+  });
+
+  it('throws on HTTP non-2xx', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response('Bad Request: invalid api_key', { status: 400 }));
+    await expect(fetchLatestFredObservation('DGS10', { apiKey: 'bad' })).rejects.toThrow(/400/);
+  });
+
+  it('throws on FRED 200 with error_message', async () => {
+    fetchSpy.mockResolvedValueOnce(
+      jsonResponse({ error_code: 400, error_message: 'Variable api_key is not registered.' }),
+    );
+    await expect(fetchLatestFredObservation('DGS10', { apiKey: 'k' })).rejects.toThrow(
+      /Variable api_key is not registered/,
+    );
   });
 });
