@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Asset, Bar, DateRange } from '@livefolio/sdk';
-import { FredDataFeed, type FredFetcher } from './fred-data-feed';
+import { FredDataFeed, type FredFetcher, type FredLatestFetcher } from './fred-data-feed';
 
 const dgs10: Asset = { kind: 'macro', id: 'DGS10', symbol: '10Y' };
 const aapl: Asset = { kind: 'equity', id: 'AAPL', symbol: 'AAPL' };
@@ -91,5 +91,38 @@ describe('FredDataFeed', () => {
   it('does not implement events', () => {
     const feed = new FredDataFeed({ apiKey: 'k', fetcher: vi.fn() });
     expect('events' in feed).toBe(false);
+  });
+
+  describe('quote', () => {
+    it('returns the latest observation as a Quote for a macro asset', async () => {
+      const latestFetcher: FredLatestFetcher = vi.fn(async () => ({
+        t: new Date('2024-04-03T00:00:00Z'),
+        value: 4.15,
+      }));
+      const feed = new FredDataFeed({ apiKey: 'k', latestFetcher });
+
+      const q = await feed.quote(dgs10);
+
+      expect(q.asset).toBe(dgs10);
+      expect(q.t).toEqual(new Date('2024-04-03T00:00:00Z'));
+      expect(q.price).toBe(4.15);
+      expect(q.bid).toBeUndefined();
+      expect(q.ask).toBeUndefined();
+      expect(latestFetcher).toHaveBeenCalledTimes(1);
+      expect(latestFetcher).toHaveBeenCalledWith('DGS10', { apiKey: 'k' });
+    });
+
+    it('throws on non-macro assets', async () => {
+      const feed = new FredDataFeed({ apiKey: 'k', latestFetcher: vi.fn() });
+      await expect(feed.quote(aapl)).rejects.toThrow(/kind="equity"/);
+    });
+
+    it('propagates errors from the latest fetcher', async () => {
+      const latestFetcher: FredLatestFetcher = vi.fn(async () => {
+        throw new Error('FRED down');
+      });
+      const feed = new FredDataFeed({ apiKey: 'k', latestFetcher });
+      await expect(feed.quote(dgs10)).rejects.toThrow('FRED down');
+    });
   });
 });
