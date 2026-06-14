@@ -24,7 +24,7 @@
     {
       "id": 3,
       "subject": "Task 3: Server assembly + in-memory integration (server.ts)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** createServer({apiKey, fetchObservations?}) -> McpServer registering get_observations (read-only annotations + outputSchema), defaulting fetcher to fetchFredObservations. Verify end-to-end over InMemoryTransport.\n\n**Files:** mcp/src/server.ts; mcp/src/server.test.ts.\n\n**Verify:** (cd mcp && npx vitest run src/server.test.ts) -> 3 tests PASS (@livefolio/fred resolves to the installed registry package, already built). Full suite (cd mcp && npx vitest run) -> 15; lint.\n\n```json:metadata\n{\"files\": [\"mcp/src/server.ts\", \"mcp/src/server.test.ts\"], \"verifyCommand\": \"cd mcp && npx vitest run\", \"acceptanceCriteria\": [\"createServer registers one tool defaulting to fetchFredObservations\", \"listTools shows annotations + outputSchema\", \"success + adapter-throw-resilience verified in-memory\"]}\n```"
     },
@@ -36,5 +36,5 @@
       "description": "**Goal:** Real bin: read FRED_API_KEY (fail fast to stderr + non-zero exit if missing), build server, connect StdioServerTransport, install stderr-only crash handlers. stdout reserved for JSON-RPC.\n\n**Files:** mcp/src/index.ts.\n\n**Verify:** npm run build -w @livefolio/fred-mcp; env -u FRED_API_KEY node mcp/dist/index.js 1>/tmp/o.txt 2>/tmp/e.txt; echo exit=$? (expect 1); test ! -s /tmp/o.txt (stdout empty); grep -q FRED_API_KEY /tmp/e.txt. Then lint + full suite (15).\n\n```json:metadata\n{\"files\": [\"mcp/src/index.ts\"], \"verifyCommand\": \"npm run build -w @livefolio/fred-mcp && env -u FRED_API_KEY node mcp/dist/index.js 1>/tmp/o.txt 2>/tmp/e.txt; echo exit=$?; test ! -s /tmp/o.txt && grep -q FRED_API_KEY /tmp/e.txt\", \"acceptanceCriteria\": [\"missing key -> stderr message + non-zero exit, empty stdout\", \"build emits shebang dist with no errors\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-06-14T20:02:00Z"
+  "lastUpdated": "2026-06-14T20:12:00Z"
 }
