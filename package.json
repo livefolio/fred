@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "FRED (St. Louis Fed) macro time series adapter for @livefolio/sdk v0.4. Node-only DataFeed implementation; pass-through observations as OHLCV bars.",
   "type": "module",
+  "workspaces": [
+    "mcp"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

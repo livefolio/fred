@@ -1,0 +1,40 @@
+{
+  "planPath": "docs/plans/2026-06-14-fred-mcp.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: Scaffold @livefolio/fred-mcp workspace",
+      "status": "completed",
+      "description": "**Goal:** Convert the repo to a workspace and stand up the mcp/ package with a green toolchain (configs + placeholder entrypoint).\n\n**Files:** package.json (root, add workspaces:[mcp]); mcp/package.json; mcp/tsconfig.json (paths:{} baseUrl:.); mcp/tsup.config.ts; mcp/vitest.config.ts; mcp/README.md; mcp/src/index.ts (placeholder).\n\n**Verify:** npm install && npm run build -w @livefolio/fred && npm run build -w @livefolio/fred-mcp && head -1 mcp/dist/index.js && npm run lint -w @livefolio/fred-mcp. Fallback if @livefolio/fred won't resolve: set mcp dep to \"@livefolio/fred\": \"file:..\".\n\n```json:metadata\n{\"files\": [\"package.json\", \"mcp/package.json\", \"mcp/tsconfig.json\", \"mcp/tsup.config.ts\", \"mcp/vitest.config.ts\", \"mcp/README.md\", \"mcp/src/index.ts\"], \"verifyCommand\": \"npm install && npm run build -w @livefolio/fred-mcp && head -1 mcp/dist/index.js && npm run lint -w @livefolio/fred-mcp\", \"acceptanceCriteria\": [\"root package.json has workspaces:[mcp]\", \"npm install links @livefolio/fred into mcp\", \"build emits dist/index.js with shebang\", \"lint passes\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Pure output shapers (format.ts)",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** Convert degenerate Bar[] into { series_id, from, to, count, bars:[{t,o,h,l,c,v}] } + one-line summary. Pure, no I/O.\n\n**Files:** mcp/src/format.ts; mcp/src/format.test.ts.\n\n**Verify:** (cd mcp && npx vitest run src/format.test.ts) -> 4 tests PASS.\n\n```json:metadata\n{\"files\": [\"mcp/src/format.ts\", \"mcp/src/format.test.ts\"], \"verifyCommand\": \"cd mcp && npx vitest run src/format.test.ts\", \"acceptanceCriteria\": [\"barsToOutput maps to {t,o,h,l,c,v} with date-only t and count\", \"observationsSummary renders non-empty and empty-range variants\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: get_observations tool handler (tools/observations.ts)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** zod schemas + makeGetObservationsHandler(deps): validate input, build inclusive->half-open DateRange (to end = caller to +1 day), call injected fetcher, shape via format.ts, map throws to tool errors (never throws across protocol).\n\n**Files:** mcp/src/tools/observations.ts; mcp/src/tools/observations.test.ts.\n\n**Verify:** (cd mcp && npx vitest run src/tools/observations.test.ts) -> 8 tests PASS.\n\n```json:metadata\n{\"files\": [\"mcp/src/tools/observations.ts\", \"mcp/src/tools/observations.test.ts\"], \"verifyCommand\": \"cd mcp && npx vitest run src/tools/observations.test.ts\", \"acceptanceCriteria\": [\"exports schemas + FetchObservations + makeGetObservationsHandler\", \"success returns structuredContent+summary\", \"inclusive to becomes half-open +1day\", \"validation errors skip fetcher\", \"fetcher throw -> tool error\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Server assembly + in-memory integration (server.ts)",
+      "status": "completed",
+      "blockedBy": [2],
+      "description": "**Goal:** createServer({apiKey, fetchObservations?}) -> McpServer registering get_observations (read-only annotations + outputSchema), defaulting fetcher to fetchFredObservations. Verify end-to-end over InMemoryTransport.\n\n**Files:** mcp/src/server.ts; mcp/src/server.test.ts.\n\n**Verify:** (cd mcp && npx vitest run src/server.test.ts) -> 3 tests PASS (@livefolio/fred resolves to the installed registry package, already built). Full suite (cd mcp && npx vitest run) -> 15; lint.\n\n```json:metadata\n{\"files\": [\"mcp/src/server.ts\", \"mcp/src/server.test.ts\"], \"verifyCommand\": \"cd mcp && npx vitest run\", \"acceptanceCriteria\": [\"createServer registers one tool defaulting to fetchFredObservations\", \"listTools shows annotations + outputSchema\", \"success + adapter-throw-resilience verified in-memory\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Bin entrypoint (index.ts)",
+      "status": "completed",
+      "blockedBy": [3],
+      "description": "**Goal:** Real bin: read FRED_API_KEY (fail fast to stderr + non-zero exit if missing), build server, connect StdioServerTransport, install stderr-only crash handlers. stdout reserved for JSON-RPC.\n\n**Files:** mcp/src/index.ts.\n\n**Verify:** npm run build -w @livefolio/fred-mcp; env -u FRED_API_KEY node mcp/dist/index.js 1>/tmp/o.txt 2>/tmp/e.txt; echo exit=$? (expect 1); test ! -s /tmp/o.txt (stdout empty); grep -q FRED_API_KEY /tmp/e.txt. Then lint + full suite (15).\n\n```json:metadata\n{\"files\": [\"mcp/src/index.ts\"], \"verifyCommand\": \"npm run build -w @livefolio/fred-mcp && env -u FRED_API_KEY node mcp/dist/index.js 1>/tmp/o.txt 2>/tmp/e.txt; echo exit=$?; test ! -s /tmp/o.txt && grep -q FRED_API_KEY /tmp/e.txt\", \"acceptanceCriteria\": [\"missing key -> stderr message + non-zero exit, empty stdout\", \"build emits shebang dist with no errors\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-14T20:22:00Z"
+}

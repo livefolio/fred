@@ -31,11 +31,21 @@ jobs:
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
 
+      # The mcp workspace builds with tsup dts:false, so the build does NOT
+      # type-check (unlike the root package, whose dts:true build emits and
+      # checks declarations). Run tsc --noEmit explicitly via the typecheck
+      # script. The mcp tests are fully offline (DI stub + in-memory transport),
+      # so they need no FRED_API_KEY.
+      - run: npm run build --workspace=mcp
+      - run: npm run typecheck --workspace=mcp
+      - run: npm run lint --workspace=mcp
+      - run: npm test --workspace=mcp
+
   version-guard:
-    # If a PR touches src/, it must bump the package version. Merging without a
-    # bump would block the release job on main (which only publishes when the
-    # version changes), silently shipping nothing — this check fails loudly at
-    # PR time instead.
+    # If a PR touches src/ (root) or mcp/src/, the matching package.json version
+    # must be bumped. Merging without a bump would block the release job on main
+    # (which only publishes when the version is ahead of npm), silently shipping
+    # nothing — this check fails loudly at PR time instead.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
@@ -44,28 +54,48 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check version bump when src/ changes
+      - name: Check version bumps when src/ changes
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           BASE_SHA=$(git merge-base "origin/${BASE_REF}" HEAD)
 
-          SRC_CHANGED=$(git diff --name-only "${BASE_SHA}" HEAD -- src/ | wc -l | tr -d ' ')
+          check_pkg() {
+            local label="$1"
+            local src_path="$2"
+            local pkg_path="$3"
 
-          if [ "$SRC_CHANGED" = "0" ]; then
-            echo "No changes under src/; version bump not required."
-            exit 0
-          fi
+            local changed
+            changed=$(git diff --name-only "${BASE_SHA}" HEAD -- "${src_path}" | wc -l | tr -d ' ')
 
-          CURRENT=$(node -p "require('./package.json').version")
-          PREVIOUS=$(git show "${BASE_SHA}:package.json" | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version")
+            if [ "$changed" = "0" ]; then
+              echo "[$label] No changes under ${src_path}; version bump not required."
+              return 0
+            fi
 
-          if [ "$CURRENT" = "$PREVIOUS" ]; then
-            echo "::error::src/ changed but package.json version is unchanged ($CURRENT). Bump the version (e.g. 'npm version patch --no-git-tag-version') before merging."
-            exit 1
-          fi
+            # A brand-new package (no package.json at the base) has nothing to
+            # bump from — its first version is the initial release.
+            if ! git cat-file -e "${BASE_SHA}:${pkg_path}" 2>/dev/null; then
+              echo "[$label] ${pkg_path} is new in this PR; version bump not required."
+              return 0
+            fi
 
-          echo "Version bumped: $PREVIOUS -> $CURRENT (src/ touched $SRC_CHANGED file(s))."
+            local current previous
+            current=$(node -p "require('./${pkg_path}').version")
+            previous=$(git show "${BASE_SHA}:${pkg_path}" | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).version")
+
+            if [ "$current" = "$previous" ]; then
+              echo "::error::[${label}] ${src_path} changed but ${pkg_path} version is unchanged ($current). Bump ${pkg_path} (e.g. 'npm version patch --no-git-tag-version') before merging."
+              return 1
+            fi
+
+            echo "[$label] Version bumped: $previous -> $current (${src_path} touched $changed file(s))."
+          }
+
+          fail=0
+          check_pkg fred src/ package.json || fail=1
+          check_pkg fred-mcp mcp/src/ mcp/package.json || fail=1
+          exit $fail
 
   release:
     needs: test
@@ -82,37 +112,67 @@ jobs:
 
       # Compare against the version actually on npm, not git history. The
       # HEAD-vs-HEAD^ heuristic is fooled by orphaned merge commits and silently
-      # skips publishing. `npm view` is the source of truth: if package.json is
-      # ahead of npm, publish; otherwise skip.
-      - name: Check if version needs publishing
+      # skips publishing. `npm view` is the source of truth: if a package.json is
+      # ahead of npm, publish that package; otherwise skip it. The two packages
+      # version and release independently.
+      - name: Check which packages need publishing
         id: version
         run: |
-          CURRENT=$(node -p "require('./package.json').version")
-          PUBLISHED=$(npm view @livefolio/fred version 2>/dev/null || echo "none")
-          if [ "$CURRENT" = "$PUBLISHED" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Version $CURRENT already on npm; skipping release."
+          ROOT_CURRENT=$(node -p "require('./package.json').version")
+          ROOT_PUBLISHED=$(npm view @livefolio/fred version 2>/dev/null || echo "none")
+          if [ "$ROOT_CURRENT" = "$ROOT_PUBLISHED" ]; then
+            echo "root_changed=false" >> "$GITHUB_OUTPUT"
+            echo "fred: $ROOT_CURRENT already on npm; skipping."
           else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "Version to publish: $CURRENT (last on npm: $PUBLISHED)"
+            echo "root_changed=true" >> "$GITHUB_OUTPUT"
+            echo "root_version=$ROOT_CURRENT" >> "$GITHUB_OUTPUT"
+            echo "fred: publish $ROOT_CURRENT (last on npm: $ROOT_PUBLISHED)"
+          fi
+
+          MCP_CURRENT=$(node -p "require('./mcp/package.json').version")
+          MCP_PUBLISHED=$(npm view @livefolio/fred-mcp version 2>/dev/null || echo "none")
+          if [ "$MCP_CURRENT" = "$MCP_PUBLISHED" ]; then
+            echo "mcp_changed=false" >> "$GITHUB_OUTPUT"
+            echo "fred-mcp: $MCP_CURRENT already on npm; skipping."
+          else
+            echo "mcp_changed=true" >> "$GITHUB_OUTPUT"
+            echo "mcp_version=$MCP_CURRENT" >> "$GITHUB_OUTPUT"
+            echo "fred-mcp: publish $MCP_CURRENT (last on npm: $MCP_PUBLISHED)"
           fi
 
       - run: npm ci
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.root_changed == 'true' || steps.version.outputs.mcp_changed == 'true'
 
       - run: npm run build
-        if: steps.version.outputs.changed == 'true'
+        if: steps.version.outputs.root_changed == 'true'
 
-      - name: Publish to npm
-        if: steps.version.outputs.changed == 'true'
+      - name: Publish @livefolio/fred
+        if: steps.version.outputs.root_changed == 'true'
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Create GitHub release
-        if: steps.version.outputs.changed == 'true'
+      - name: Create GitHub release for @livefolio/fred
+        if: steps.version.outputs.root_changed == 'true'
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION="${{ steps.version.outputs.root_version }}"
           gh release create "v${VERSION}" --title "v${VERSION}" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: npm run build --workspace=mcp
+        if: steps.version.outputs.mcp_changed == 'true'
+
+      - name: Publish @livefolio/fred-mcp
+        if: steps.version.outputs.mcp_changed == 'true'
+        run: npm publish --access public --workspace=mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub release for @livefolio/fred-mcp
+        if: steps.version.outputs.mcp_changed == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.mcp_version }}"
+          gh release create "fred-mcp-v${VERSION}" --title "fred-mcp v${VERSION}" --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
