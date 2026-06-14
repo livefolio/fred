@@ -10,7 +10,7 @@
     {
       "id": 1,
       "subject": "Task 1: Pure output shapers (format.ts)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** Convert degenerate Bar[] into { series_id, from, to, count, bars:[{t,o,h,l,c,v}] } + one-line summary. Pure, no I/O.\n\n**Files:** mcp/src/format.ts; mcp/src/format.test.ts.\n\n**Verify:** (cd mcp && npx vitest run src/format.test.ts) -> 4 tests PASS.\n\n```json:metadata\n{\"files\": [\"mcp/src/format.ts\", \"mcp/src/format.test.ts\"], \"verifyCommand\": \"cd mcp && npx vitest run src/format.test.ts\", \"acceptanceCriteria\": [\"barsToOutput maps to {t,o,h,l,c,v} with date-only t and count\", \"observationsSummary renders non-empty and empty-range variants\"]}\n```"
     },
@@ -36,5 +36,5 @@
       "description": "**Goal:** Real bin: read FRED_API_KEY (fail fast to stderr + non-zero exit if missing), build server, connect StdioServerTransport, install stderr-only crash handlers. stdout reserved for JSON-RPC.\n\n**Files:** mcp/src/index.ts.\n\n**Verify:** npm run build -w @livefolio/fred-mcp; env -u FRED_API_KEY node mcp/dist/index.js 1>/tmp/o.txt 2>/tmp/e.txt; echo exit=$? (expect 1); test ! -s /tmp/o.txt (stdout empty); grep -q FRED_API_KEY /tmp/e.txt. Then lint + full suite (15).\n\n```json:metadata\n{\"files\": [\"mcp/src/index.ts\"], \"verifyCommand\": \"npm run build -w @livefolio/fred-mcp && env -u FRED_API_KEY node mcp/dist/index.js 1>/tmp/o.txt 2>/tmp/e.txt; echo exit=$?; test ! -s /tmp/o.txt && grep -q FRED_API_KEY /tmp/e.txt\", \"acceptanceCriteria\": [\"missing key -> stderr message + non-zero exit, empty stdout\", \"build emits shebang dist with no errors\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-06-14T19:45:00Z"
+  "lastUpdated": "2026-06-14T19:52:00Z"
 }
