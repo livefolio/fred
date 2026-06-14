@@ -31,10 +31,10 @@
     {
       "id": 4,
       "subject": "Task 4: Bin entrypoint (index.ts)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** Real bin: read FRED_API_KEY (fail fast to stderr + non-zero exit if missing), build server, connect StdioServerTransport, install stderr-only crash handlers. stdout reserved for JSON-RPC.\n\n**Files:** mcp/src/index.ts.\n\n**Verify:** npm run build -w @livefolio/fred-mcp; env -u FRED_API_KEY node mcp/dist/index.js 1>/tmp/o.txt 2>/tmp/e.txt; echo exit=$? (expect 1); test ! -s /tmp/o.txt (stdout empty); grep -q FRED_API_KEY /tmp/e.txt. Then lint + full suite (15).\n\n```json:metadata\n{\"files\": [\"mcp/src/index.ts\"], \"verifyCommand\": \"npm run build -w @livefolio/fred-mcp && env -u FRED_API_KEY node mcp/dist/index.js 1>/tmp/o.txt 2>/tmp/e.txt; echo exit=$?; test ! -s /tmp/o.txt && grep -q FRED_API_KEY /tmp/e.txt\", \"acceptanceCriteria\": [\"missing key -> stderr message + non-zero exit, empty stdout\", \"build emits shebang dist with no errors\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-06-14T20:12:00Z"
+  "lastUpdated": "2026-06-14T20:22:00Z"
 }
